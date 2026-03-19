@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import time
 from typing import Any
 
 import requests
@@ -28,6 +29,21 @@ class PinchTabClient:
         response = self._request("POST", "/instances/launch", json=payload)
         self._remember_instance(response)
         return response
+
+    def wait_for_instance_ready(self, instance_id: str, timeout_seconds: float | None = None) -> None:
+        deadline = time.monotonic() + float(timeout_seconds or self.settings.pinchtab_instance_ready_wait_seconds)
+        last_error: Exception | None = None
+        while time.monotonic() < deadline:
+            try:
+                health = self.instance_health(instance_id)
+                if isinstance(health, dict) and health.get("status") in (None, "ok", "healthy", True):
+                    return
+            except Exception as exc:  # pragma: no cover - depends on live runtime
+                last_error = exc
+            time.sleep(1.0)
+        if last_error:
+            raise RuntimeError(f"PinchTab instance {instance_id} did not become ready") from last_error
+        raise RuntimeError(f"PinchTab instance {instance_id} did not become ready")
 
     def instance_health(self, instance_id: str) -> dict[str, Any]:
         return self._request("GET", "/health", base_url=self.instance_base_url(instance_id))

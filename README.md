@@ -44,7 +44,7 @@ ais mcp
 
 - PinchTab must be running locally and reachable at `AIS_PINCHTAB_BASE_URL`.
 - The Google browser workflow requires `security.allowEvaluate = true` in PinchTab.
-- Headed mode is the easiest way to debug Google Images behavior live.
+- Headed mode is the recommended default for Google Images reliability. Headless mode can work, but Google may block it and trigger a fallback.
 
 ## HTTP Endpoints
 

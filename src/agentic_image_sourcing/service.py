@@ -125,7 +125,7 @@ class RetrievalService:
         )
         candidate = self.candidate_inspect(request.candidate_id)
         inspected = adapter.inspect_candidate(candidate)
-        inspected = self.repository.update_candidate(inspected)
+        inspected = self.repository.upsert_candidate(inspected)
 
         source_page_candidates: list[CandidateRecord] = []
         if request.open_source_page and inspected.source_page_url:
@@ -137,9 +137,9 @@ class RetrievalService:
         return GoogleInspectResponse(job=job, candidate=inspected, source_page_candidates=source_page_candidates)
 
     def google_image_download(self, request: GoogleDownloadRequest) -> AssetSaveResponse:
-        self.google_image_inspect(GoogleInspectRequest(candidate_id=request.candidate_id))
+        inspected = self.google_image_inspect(GoogleInspectRequest(candidate_id=request.candidate_id))
         return self.asset_save(
-            SaveAssetRequest(candidate_id=request.candidate_id, collection=request.collection, tags=request.tags)
+            SaveAssetRequest(candidate_id=inspected.candidate.candidate_id, collection=request.collection, tags=request.tags)
         )
 
     def image_fetch(self, request: FetchRequest) -> FetchResult:

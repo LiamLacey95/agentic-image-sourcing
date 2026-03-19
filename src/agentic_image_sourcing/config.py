@@ -35,10 +35,12 @@ class Settings(BaseSettings):
     pinchtab_base_url: str = "http://127.0.0.1:9867"
     pinchtab_token: str | None = None
     pinchtab_default_browser_mode: str = "headed"
+    pinchtab_default_profile_id: str | None = None
     pinchtab_start_port: int | None = None
     pinchtab_gallery_scroll_step: int = 1200
     pinchtab_gallery_scroll_attempts: int = 8
     pinchtab_scroll_pause_seconds: float = 1.0
+    pinchtab_instance_ready_wait_seconds: float = 20.0
     google_gallery_tile_size: int = 256
     google_gallery_columns: int = 4
     google_gallery_pool_multiplier: int = 3

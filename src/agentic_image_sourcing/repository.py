@@ -152,6 +152,17 @@ class SQLiteRepository:
         return job
 
     def upsert_candidate(self, candidate: CandidateRecord) -> CandidateRecord:
+        current = self.get_candidate(candidate.candidate_id)
+        if current:
+            if current.image_url == candidate.image_url:
+                merged = self._merge_candidates(current, candidate)
+                return self.update_candidate(merged)
+            url_owner = self.get_candidate_by_url(candidate.image_url)
+            if url_owner and url_owner.candidate_id != candidate.candidate_id:
+                merged = self._merge_candidates(url_owner, candidate)
+                return self.update_candidate(merged)
+            return self.update_candidate(candidate)
+
         existing = self.get_candidate_by_url(candidate.image_url)
         if existing:
             merged = self._merge_candidates(existing, candidate)
@@ -499,6 +510,17 @@ class PsycopgRepository:
         return job
 
     def upsert_candidate(self, candidate: CandidateRecord) -> CandidateRecord:
+        current = self.get_candidate(candidate.candidate_id)
+        if current:
+            if current.image_url == candidate.image_url:
+                merged = SQLiteRepository._merge_candidates(current, candidate)
+                return self.update_candidate(merged)
+            url_owner = self.get_candidate_by_url(candidate.image_url)
+            if url_owner and url_owner.candidate_id != candidate.candidate_id:
+                merged = SQLiteRepository._merge_candidates(url_owner, candidate)
+                return self.update_candidate(merged)
+            return self.update_candidate(candidate)
+
         existing = self.get_candidate_by_url(candidate.image_url)
         if existing:
             merged = SQLiteRepository._merge_candidates(existing, candidate)

@@ -13,6 +13,7 @@ dist/
 *.egg-info/
 
 var/
+.pinchtab/
 
 .DS_Store
 Thumbs.db

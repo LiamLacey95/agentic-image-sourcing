@@ -16,6 +16,8 @@ from ..utils import domain_for_url
 GALLERY_EXTRACTION_JS = """
 (() => {
   const normalizeText = (value) => ((value || '').replace(/\\s+/g, ' ').trim() || null);
+  const readImageSource = (img) =>
+    img?.currentSrc || img?.src || img?.getAttribute?.('src') || img?.getAttribute?.('data-src') || null;
   const fromImgres = (href) => {
     try {
       const url = new URL(href, location.origin);
@@ -28,7 +30,7 @@ GALLERY_EXTRACTION_JS = """
     }
   };
   const isMeaningful = (img) => {
-    const src = img.currentSrc || img.src || img.getAttribute('src') || img.getAttribute('data-src') || '';
+    const src = readImageSource(img) || '';
     const width = img.naturalWidth || img.width || 0;
     const height = img.naturalHeight || img.height || 0;
     return Boolean(src) && (width >= 120 || height >= 120);
@@ -41,6 +43,72 @@ GALLERY_EXTRACTION_JS = """
       return false;
     }
   };
+  const rectFor = (node) => {
+    const rect = (node || document.body).getBoundingClientRect();
+    return {
+      left: rect.left,
+      top: rect.top,
+      width: rect.width,
+      height: rect.height
+    };
+  };
+  const preferExternalLink = (card) => {
+    const links = Array.from(card.querySelectorAll('a[href]'))
+      .map((link) => ({
+        href: link.href,
+        text: normalizeText(link.innerText),
+        ariaLabel: normalizeText(link.getAttribute('aria-label')),
+        className: link.className || ''
+      }))
+      .filter((link) => isExternalHref(link.href));
+    return (
+      links.find((link) => link.className.includes('EZAeBe')) ||
+      links.find((link) => Boolean(link.text || link.ariaLabel)) ||
+      links[0] ||
+      null
+    );
+  };
+  const resultCards = Array.from(document.querySelectorAll('div[data-lpage][data-docid], div[data-lpage], div[data-docid]'));
+  if (resultCards.length) {
+    const items = [];
+    const seen = new Set();
+    for (const card of resultCards) {
+      const wrapper =
+        card.querySelector('div.F0uyec[role="button"], div.F0uyec, [role="button"][jsaction*="J29LQb"]') ||
+        card.querySelector('[role="button"], [jsaction*="J29LQb"]') ||
+        card;
+      const img = wrapper.querySelector('img') || card.querySelector('img');
+      if (!img || !isMeaningful(img)) continue;
+      const thumb = readImageSource(img);
+      const sourceLink = preferExternalLink(card);
+      const sourcePageUrl = card.getAttribute('data-lpage') || sourceLink?.href || null;
+      const rect = rectFor(wrapper.getBoundingClientRect().width > 1 || wrapper.getBoundingClientRect().height > 1 ? wrapper : img);
+      const dedupeKey = [card.getAttribute('data-docid') || '', thumb || '', sourcePageUrl || '', Math.round(rect.top), Math.round(rect.left)].join('|');
+      if (!thumb || seen.has(dedupeKey)) continue;
+      seen.add(dedupeKey);
+      items.push({
+        domIndex: items.length,
+        googleResultUrl: null,
+        imageUrl: thumb,
+        sourcePageUrl,
+        thumbnailUrl: thumb,
+        altText: normalizeText(img.alt) || sourceLink?.ariaLabel || sourceLink?.text,
+        nearbyText: sourceLink?.text || normalizeText(card.innerText),
+        docId: card.getAttribute('data-docid') || null,
+        rect
+      });
+    }
+    return {
+      items,
+      viewport: {
+        width: window.innerWidth,
+        height: window.innerHeight,
+        dpr: window.devicePixelRatio || 1
+      },
+      pageTitle: document.title,
+      currentUrl: location.href
+    };
+  }
 
   const items = [];
   const seen = new Set();
@@ -50,12 +118,12 @@ GALLERY_EXTRACTION_JS = """
     const wrapper = img.closest('[jsaction], a, [role="link"], [role="button"]') || img;
     const container = wrapper.closest('div[data-ved], div.isv-r, [data-docid], [data-lpage], [data-tbnid], [jscontroller]') || wrapper.parentElement || wrapper;
     const href = wrapper instanceof HTMLAnchorElement ? wrapper.href : wrapper.getAttribute?.('href') || null;
-    const thumb = img.currentSrc || img.src || img.getAttribute('src') || img.getAttribute('data-src') || null;
+    const thumb = readImageSource(img);
     const parsed = href && href.includes('/imgres?') ? fromImgres(href) : { imageUrl: null, sourcePageUrl: null };
     const googleResultUrl = href && !isExternalHref(href) ? href : null;
     const sourcePageUrl = parsed.sourcePageUrl || (href && isExternalHref(href) ? href : null);
     const rectNode = wrapper.getBoundingClientRect().width > 1 || wrapper.getBoundingClientRect().height > 1 ? wrapper : img;
-    const rect = rectNode.getBoundingClientRect();
+    const rect = rectFor(rectNode);
     const dedupeKey = [
       thumb,
       normalizeText(img.alt),
@@ -91,6 +159,26 @@ GALLERY_EXTRACTION_JS = """
     },
     pageTitle: document.title,
     currentUrl: location.href
+  };
+})()
+"""
+
+BLOCK_PAGE_JS = """
+(() => {
+  const bodyText = ((document.body?.innerText || '').replace(/\\s+/g, ' ').trim() || '').toLowerCase();
+  const title = document.title || '';
+  const href = location.href;
+  const blocked =
+    href.includes('/sorry/') ||
+    title.toLowerCase().includes('sorry') ||
+    bodyText.includes('unusual traffic') ||
+    bodyText.includes('detected unusual traffic') ||
+    bodyText.includes('our systems have detected');
+  return {
+    blocked,
+    currentUrl: href,
+    pageTitle: title,
+    bodySnippet: bodyText.slice(0, 500)
   };
 })()
 """
@@ -163,6 +251,23 @@ INSPECT_JS = """
 
 CLICK_TILE_JS_TEMPLATE = """
 ((targetIndex) => {
+  const cards = Array.from(document.querySelectorAll('div[data-lpage][data-docid], div[data-lpage], div[data-docid]'))
+    .map((card) => ({
+      card,
+      wrapper:
+        card.querySelector('div.F0uyec[role="button"], div.F0uyec, [role="button"][jsaction*="J29LQb"]') ||
+        card.querySelector('[role="button"], [jsaction*="J29LQb"]') ||
+        null
+    }))
+    .filter((item) => item.wrapper);
+  const cardTarget = cards[targetIndex];
+  if (cardTarget) {
+    cardTarget.wrapper.scrollIntoView({ block: 'center', inline: 'center' });
+    cardTarget.wrapper.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
+    cardTarget.wrapper.click();
+    return { clicked: true, count: cards.length };
+  }
+
   const isMeaningful = (img) => {
     const src = img.currentSrc || img.src || img.getAttribute('src') || img.getAttribute('data-src') || '';
     const width = img.naturalWidth || img.width || 0;
@@ -219,15 +324,21 @@ class GoogleImagesBrowserAdapter:
         self._lock = Lock()
 
     def build_gallery(self, request: GoogleGalleryRequest) -> tuple[str, str, list[CandidateRecord], str]:
+        browser_mode = request.browser_mode or BrowserMode(self.settings.pinchtab_default_browser_mode)
+        profile_id = request.profile_id or self.settings.pinchtab_default_profile_id
         instance_id = self._ensure_instance(
-            browser_mode=request.browser_mode or BrowserMode(self.settings.pinchtab_default_browser_mode),
-            profile_id=request.profile_id,
+            browser_mode=browser_mode,
+            profile_id=profile_id,
             instance_id=request.instance_id,
         )
         query_url = f"https://www.google.com/search?q={quote_plus(request.query)}&udm=2"
-        self.pinchtab.navigate(instance_id, query_url)
-        time.sleep(self.settings.pinchtab_scroll_pause_seconds)
-        self._dismiss_consent(instance_id)
+        instance_id, browser_mode = self._open_gallery_page(
+            query_url=query_url,
+            instance_id=instance_id,
+            browser_mode=browser_mode,
+            profile_id=profile_id,
+            managed_instance=request.instance_id is None,
+        )
 
         effective_offset = request.offset if request.offset > 0 else max(request.batch_number - 1, 0) * request.batch_size
         pool_target = max(
@@ -286,6 +397,7 @@ class GoogleImagesBrowserAdapter:
                                 "tile_index": index,
                                 "dom_index": item.get("domIndex"),
                                 "quality_score": item.get("qualityScore"),
+                                "browser_mode": browser_mode.value,
                                 "offset": request.offset,
                             },
                         )
@@ -362,6 +474,33 @@ class GoogleImagesBrowserAdapter:
         if accepted:
             time.sleep(self.settings.pinchtab_scroll_pause_seconds)
 
+    def _open_gallery_page(
+        self,
+        query_url: str,
+        instance_id: str,
+        browser_mode: BrowserMode,
+        profile_id: str | None,
+        managed_instance: bool,
+    ) -> tuple[str, BrowserMode]:
+        self.pinchtab.navigate(instance_id, query_url)
+        time.sleep(self.settings.pinchtab_scroll_pause_seconds)
+        self._dismiss_consent(instance_id)
+        block_state = self._block_state(instance_id)
+        if not block_state.get("blocked"):
+            return instance_id, browser_mode
+        if browser_mode != BrowserMode.headed and managed_instance:
+            fallback_instance_id = self._ensure_instance(BrowserMode.headed, profile_id=profile_id, instance_id=None)
+            self.pinchtab.navigate(fallback_instance_id, query_url)
+            time.sleep(self.settings.pinchtab_scroll_pause_seconds)
+            self._dismiss_consent(fallback_instance_id)
+            fallback_state = self._block_state(fallback_instance_id)
+            if not fallback_state.get("blocked"):
+                return fallback_instance_id, BrowserMode.headed
+        raise RuntimeError(
+            "Google Images blocked the browser session. "
+            f"URL={block_state.get('currentUrl')} title={block_state.get('pageTitle')!r}"
+        )
+
     def _collect_gallery_payload(self, instance_id: str, needed: int) -> dict:
         payload = {"items": [], "viewport": {"width": 0, "height": 0, "dpr": 1}}
         attempts = 0
@@ -378,6 +517,12 @@ class GoogleImagesBrowserAdapter:
             )
             time.sleep(self.settings.pinchtab_scroll_pause_seconds)
         return payload
+
+    def _block_state(self, instance_id: str) -> dict:
+        payload = self.pinchtab.evaluate(instance_id, BLOCK_PAGE_JS)
+        if isinstance(payload, dict):
+            return payload
+        return {"blocked": False}
 
     def _rank_items(self, items: Iterable[dict]) -> list[dict]:
         ranked: list[dict] = []
@@ -467,6 +612,7 @@ class GoogleImagesBrowserAdapter:
                     self._managed_instances.pop(key, None)
             response = self.pinchtab.instance_start(mode=browser_mode, profile_id=profile_id)
             created = self._extract_instance_id(response)
+            self.pinchtab.wait_for_instance_ready(created)
             self._managed_instances[key] = created
             return created
 

@@ -52,7 +52,7 @@ def test_google_gallery_inspect_and_download_flow(service) -> None:
     inspected = service.google_image_inspect(GoogleInspectRequest(candidate_id=gallery.candidates[0].candidate_id))
     assert inspected.candidate.image_url == "https://cdn.example.com/full-resolution.jpg"
     assert inspected.candidate.pinchtab_instance_id == "inst-managed"
-    persisted = service.candidate_inspect(gallery.candidates[0].candidate_id)
+    persisted = service.candidate_inspect(inspected.candidate.candidate_id)
     assert persisted.image_url == "https://cdn.example.com/full-resolution.jpg"
 
     saved = service.google_image_download(

@@ -1,0 +1,83 @@
+[
+  {
+    "name": "google_image_gallery",
+    "description": "Search Google Images through PinchTab, score a larger candidate pool, and return a contact sheet plus numbered candidates.",
+    "method": "POST",
+    "url": "http://127.0.0.1:8000/google/gallery",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "query": {
+          "type": "string"
+        },
+        "batch_size": {
+          "type": "integer",
+          "default": 12
+        },
+        "batch_number": {
+          "type": "integer",
+          "default": 1
+        },
+        "offset": {
+          "type": "integer",
+          "default": 0
+        },
+        "browser_mode": {
+          "type": "string",
+          "enum": ["headed", "headless"]
+        },
+        "profile_id": {
+          "type": "string"
+        },
+        "instance_id": {
+          "type": "string"
+        }
+      },
+      "required": ["query"]
+    }
+  },
+  {
+    "name": "google_image_inspect",
+    "description": "Open a selected Google Images candidate, resolve the larger preview image, and return source page metadata.",
+    "method": "POST",
+    "url": "http://127.0.0.1:8000/google/inspect",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "candidate_id": {
+          "type": "string"
+        },
+        "open_source_page": {
+          "type": "boolean",
+          "default": false
+        }
+      },
+      "required": ["candidate_id"]
+    }
+  },
+  {
+    "name": "google_image_download",
+    "description": "Fetch and persist a selected Google Images candidate after inspection.",
+    "method": "POST",
+    "url": "http://127.0.0.1:8000/google/download",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "candidate_id": {
+          "type": "string"
+        },
+        "collection": {
+          "type": "string"
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        }
+      },
+      "required": ["candidate_id", "collection"]
+    }
+  }
+]
