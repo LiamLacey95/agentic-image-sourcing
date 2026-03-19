@@ -15,7 +15,7 @@ ais api --host 127.0.0.1 --port 8000
 Suggested tool contract inside PAI:
 
 1. `google_image_gallery`
-   - input: `query`, optional `batch_size`, optional `offset`
+   - input: `query`, optional `batch_size`, optional `batch_number`, optional `offset`
    - output: `gallery_id`, `gallery_image_path`, `candidates`
 2. `google_image_inspect`
    - input: `candidate_id`
@@ -31,6 +31,8 @@ Recommended PAI loop:
 3. pick one or more `candidate_id` values
 4. inspect each candidate
 5. download the keepers
+
+For more variety, ask for `batch_number=2` or `batch_number=3` rather than repeating the same first page of results.
 
 Example HTTP calls:
 

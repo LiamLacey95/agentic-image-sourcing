@@ -77,6 +77,7 @@ class CandidateRecord(BaseModel):
     content_hash: str | None = None
     perceptual_hash: str | None = None
     last_error: str | None = None
+    quality_score: float | None = None
     gallery_id: str | None = None
     tile_index: int | None = None
     google_result_url: str | None = None
@@ -135,6 +136,7 @@ class SaveAssetRequest(BaseModel):
 class GoogleGalleryRequest(BaseModel):
     query: str
     batch_size: int = 12
+    batch_number: int = 1
     offset: int = 0
     browser_mode: BrowserMode | None = None
     profile_id: str | None = None
@@ -183,6 +185,12 @@ class GoogleGalleryResponse(BaseModel):
     gallery_id: str
     gallery_image_path: str
     pinchtab_instance_id: str
+    batch_number: int
+    next_batch_number: int | None = None
+    has_more: bool = False
+    requested_offset: int = 0
+    effective_offset: int = 0
+    candidate_pool_size: int = 0
     candidates: list[CandidateRecord]
 
 

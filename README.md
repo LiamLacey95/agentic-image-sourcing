@@ -62,10 +62,12 @@ ais mcp
 Use the Google browser workflow when an agent needs to visually assess a batch of results:
 
 1. Call `POST /google/gallery` or `google_image_gallery`.
-2. The service drives PinchTab to Google Images, assembles a 12-at-a-time contact sheet, and returns a manifest of numbered candidates.
+2. The service drives PinchTab to Google Images, scores a larger pool of candidates, assembles a 12-at-a-time contact sheet, and returns a manifest of numbered candidates.
 3. The agent evaluates the contact sheet visually and selects one or more `candidate_id` values.
 4. Call `POST /google/inspect` or `google_image_inspect` to resolve the larger preview/source page metadata.
 5. Call `POST /google/download` or `google_image_download` to cache and persist selected results.
+
+For follow-up batches, use `batch_number=2` or `batch_number=3` on the gallery request. The service will return the next scored page of results.
 
 The current implementation isolates Google DOM scraping inside the PinchTab-backed adapter so selector updates stay contained when Google changes its layout.
 

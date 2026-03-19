@@ -14,6 +14,7 @@ CANDIDATE_EXTRA_COLUMNS = {
     "tile_index": "INTEGER",
     "google_result_url": "TEXT",
     "pinchtab_instance_id": "TEXT",
+    "quality_score": "REAL",
 }
 
 
@@ -101,6 +102,7 @@ class SQLiteRepository:
                     content_hash TEXT,
                     perceptual_hash TEXT,
                     last_error TEXT,
+                    quality_score REAL,
                     gallery_id TEXT,
                     tile_index INTEGER,
                     google_result_url TEXT,
@@ -162,9 +164,9 @@ class SQLiteRepository:
                     candidate_id, job_id, query_text, image_url, thumbnail_url, source_page_url, source_domain,
                     mime_type, width, height, byte_size, page_title, alt_text, nearby_text, crawl_timestamp,
                     fetch_status, storage_key, local_cache_path, page_screenshot_path, content_hash, perceptual_hash,
-                    last_error, gallery_id, tile_index, google_result_url, pinchtab_instance_id, provenance_json
+                    last_error, quality_score, gallery_id, tile_index, google_result_url, pinchtab_instance_id, provenance_json
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 self._candidate_values(candidate),
             )
@@ -213,7 +215,7 @@ class SQLiteRepository:
                     job_id = ?, query_text = ?, image_url = ?, thumbnail_url = ?, source_page_url = ?, source_domain = ?,
                     mime_type = ?, width = ?, height = ?, byte_size = ?, page_title = ?, alt_text = ?,
                     nearby_text = ?, crawl_timestamp = ?, fetch_status = ?, storage_key = ?, local_cache_path = ?,
-                    page_screenshot_path = ?, content_hash = ?, perceptual_hash = ?, last_error = ?,
+                    page_screenshot_path = ?, content_hash = ?, perceptual_hash = ?, last_error = ?, quality_score = ?,
                     gallery_id = ?, tile_index = ?, google_result_url = ?, pinchtab_instance_id = ?, provenance_json = ?
                 WHERE candidate_id = ?
                 """,
@@ -239,6 +241,7 @@ class SQLiteRepository:
                     candidate.content_hash,
                     candidate.perceptual_hash,
                     candidate.last_error,
+                    candidate.quality_score,
                     candidate.gallery_id,
                     candidate.tile_index,
                     candidate.google_result_url,
@@ -293,6 +296,7 @@ class SQLiteRepository:
                 "content_hash": row["content_hash"],
                 "perceptual_hash": row["perceptual_hash"],
                 "last_error": row["last_error"],
+                "quality_score": row["quality_score"],
                 "gallery_id": row["gallery_id"],
                 "tile_index": row["tile_index"],
                 "google_result_url": row["google_result_url"],
@@ -326,6 +330,7 @@ class SQLiteRepository:
             candidate.content_hash,
             candidate.perceptual_hash,
             candidate.last_error,
+            candidate.quality_score,
             candidate.gallery_id,
             candidate.tile_index,
             candidate.google_result_url,
@@ -355,6 +360,7 @@ class SQLiteRepository:
                 "pinchtab_instance_id": incoming.pinchtab_instance_id or existing.pinchtab_instance_id,
                 "crawl_timestamp": incoming.crawl_timestamp,
                 "page_screenshot_path": incoming.page_screenshot_path or existing.page_screenshot_path,
+                "quality_score": incoming.quality_score if incoming.quality_score is not None else existing.quality_score,
                 "provenance": existing.provenance.model_copy(
                     update={
                         "crawl_timestamp": incoming.crawl_timestamp,
@@ -435,6 +441,7 @@ class PsycopgRepository:
                         content_hash TEXT,
                         perceptual_hash TEXT,
                         last_error TEXT,
+                        quality_score REAL,
                         gallery_id TEXT,
                         tile_index INTEGER,
                         google_result_url TEXT,
@@ -505,9 +512,9 @@ class PsycopgRepository:
                         candidate_id, job_id, query_text, image_url, thumbnail_url, source_page_url, source_domain,
                         mime_type, width, height, byte_size, page_title, alt_text, nearby_text, crawl_timestamp,
                         fetch_status, storage_key, local_cache_path, page_screenshot_path, content_hash, perceptual_hash,
-                        last_error, gallery_id, tile_index, google_result_url, pinchtab_instance_id, provenance_json
+                        last_error, quality_score, gallery_id, tile_index, google_result_url, pinchtab_instance_id, provenance_json
                     )
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     """,
                     SQLiteRepository._candidate_values(candidate),
                 )
@@ -566,7 +573,7 @@ class PsycopgRepository:
                         mime_type = %s, width = %s, height = %s, byte_size = %s, page_title = %s, alt_text = %s,
                         nearby_text = %s, crawl_timestamp = %s, fetch_status = %s, storage_key = %s, local_cache_path = %s,
                         page_screenshot_path = %s, content_hash = %s, perceptual_hash = %s, last_error = %s,
-                        gallery_id = %s, tile_index = %s, google_result_url = %s, pinchtab_instance_id = %s, provenance_json = %s
+                        quality_score = %s, gallery_id = %s, tile_index = %s, google_result_url = %s, pinchtab_instance_id = %s, provenance_json = %s
                     WHERE candidate_id = %s
                     """,
                     (
@@ -591,6 +598,7 @@ class PsycopgRepository:
                         candidate.content_hash,
                         candidate.perceptual_hash,
                         candidate.last_error,
+                        candidate.quality_score,
                         candidate.gallery_id,
                         candidate.tile_index,
                         candidate.google_result_url,
@@ -647,6 +655,7 @@ class PsycopgRepository:
                 "content_hash": row["content_hash"],
                 "perceptual_hash": row["perceptual_hash"],
                 "last_error": row["last_error"],
+                "quality_score": row["quality_score"],
                 "gallery_id": row["gallery_id"],
                 "tile_index": row["tile_index"],
                 "google_result_url": row["google_result_url"],

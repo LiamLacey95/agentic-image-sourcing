@@ -41,10 +41,13 @@ def test_fetch_and_save_asset_updates_candidate_and_writes_files(service) -> Non
 
 
 def test_google_gallery_inspect_and_download_flow(service) -> None:
-    gallery = service.google_image_gallery(GoogleGalleryRequest(query="robot concept art", batch_size=12))
+    gallery = service.google_image_gallery(GoogleGalleryRequest(query="robot concept art", batch_size=12, batch_number=2))
     assert Path(gallery.gallery_image_path).exists()
     assert len(gallery.candidates) == 12
     assert gallery.candidates[0].tile_index == 1
+    assert gallery.batch_number == 2
+    assert gallery.next_batch_number == 3
+    assert gallery.has_more is True
 
     inspected = service.google_image_inspect(GoogleInspectRequest(candidate_id=gallery.candidates[0].candidate_id))
     assert inspected.candidate.image_url == "https://cdn.example.com/full-resolution.jpg"

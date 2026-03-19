@@ -25,11 +25,12 @@ def test_google_gallery_and_inspect_routes(service) -> None:
     app = create_app(service=service, settings=service.settings)
     client = TestClient(app)
 
-    gallery = client.post("/google/gallery", json=GoogleGalleryRequest(query="robot art").model_dump())
+    gallery = client.post("/google/gallery", json=GoogleGalleryRequest(query="robot art", batch_number=3).model_dump())
     assert gallery.status_code == 200
     payload = gallery.json()
     assert payload["gallery_id"] == "gallery-123"
     assert len(payload["candidates"]) == 12
+    assert payload["batch_number"] == 3
 
     candidate_id = payload["candidates"][0]["candidate_id"]
     inspect = client.post("/google/inspect", json=GoogleInspectRequest(candidate_id=candidate_id).model_dump())

@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import time
+from collections.abc import Iterable
 from threading import Lock
-from urllib.parse import quote_plus
+from urllib.parse import quote_plus, urlparse
 from uuid import uuid4
 
 from ..config import Settings
@@ -228,8 +229,16 @@ class GoogleImagesBrowserAdapter:
         time.sleep(self.settings.pinchtab_scroll_pause_seconds)
         self._dismiss_consent(instance_id)
 
-        raw = self._collect_gallery_payload(instance_id, request.offset + request.batch_size)
-        selected = raw["items"][request.offset : request.offset + request.batch_size]
+        effective_offset = request.offset if request.offset > 0 else max(request.batch_number - 1, 0) * request.batch_size
+        pool_target = max(
+            effective_offset + request.batch_size,
+            request.batch_size * max(1, int(self.settings.google_gallery_pool_multiplier)),
+        )
+        raw = self._collect_gallery_payload(instance_id, pool_target)
+        ranked_items = self._rank_items(raw.get("items", []))
+        selected = ranked_items[effective_offset : effective_offset + request.batch_size]
+        if not selected:
+            raise RuntimeError(f"No Google Images results available for batch {request.batch_number}")
         screenshot_bytes = None
         if any(not item.get("thumbnailUrl") for item in selected):
             screenshot_bytes = self.pinchtab.screenshot(instance_id)
@@ -256,6 +265,7 @@ class GoogleImagesBrowserAdapter:
                 alt_text=item.get("altText"),
                 nearby_text=item.get("nearbyText"),
                 crawl_timestamp=now,
+                quality_score=item.get("qualityScore"),
                 gallery_id=gallery_id,
                 tile_index=index,
                 google_result_url=item.get("googleResultUrl"),
@@ -271,8 +281,11 @@ class GoogleImagesBrowserAdapter:
                             details={
                                 "query_url": raw.get("currentUrl"),
                                 "instance_id": instance_id,
+                                "batch_number": request.batch_number,
+                                "effective_offset": effective_offset,
                                 "tile_index": index,
                                 "dom_index": item.get("domIndex"),
+                                "quality_score": item.get("qualityScore"),
                                 "offset": request.offset,
                             },
                         )
@@ -365,6 +378,56 @@ class GoogleImagesBrowserAdapter:
             )
             time.sleep(self.settings.pinchtab_scroll_pause_seconds)
         return payload
+
+    def _rank_items(self, items: Iterable[dict]) -> list[dict]:
+        ranked: list[dict] = []
+        for position, item in enumerate(items):
+            score = self._score_item(item, position)
+            ranked.append({**item, "qualityScore": score})
+        ranked.sort(key=lambda item: (-float(item.get("qualityScore") or 0.0), int(item.get("domIndex") or 0)))
+        return ranked
+
+    def _score_item(self, item: dict, position: int) -> float:
+        score = 0.0
+        image_url = str(item.get("imageUrl") or "")
+        thumbnail_url = str(item.get("thumbnailUrl") or "")
+        source_page_url = str(item.get("sourcePageUrl") or "")
+        alt_text = str(item.get("altText") or "")
+        nearby_text = str(item.get("nearbyText") or "")
+        rect = item.get("rect") or {}
+        width = float(rect.get("width") or 0)
+        height = float(rect.get("height") or 0)
+        area = width * height
+
+        if source_page_url:
+            score += 20.0
+            if not self._looks_google_owned(source_page_url):
+                score += 10.0
+        if image_url and not image_url.startswith("data:"):
+            score += 10.0
+        if thumbnail_url and not thumbnail_url.startswith("data:"):
+            score += 5.0
+        score += min(20.0, area / 4000.0)
+        score += min(10.0, len(alt_text) / 20.0)
+        score += min(5.0, len(nearby_text) / 80.0)
+        score += max(0.0, 5.0 - min(position, 5))
+
+        lowered = f"{alt_text} {nearby_text} {image_url}".lower()
+        penalties = ("logo", "icon", "clipart", "vector", "watermark", "favicon")
+        for term in penalties:
+            if term in lowered:
+                score -= 8.0
+        if image_url.startswith("data:"):
+            score -= 12.0
+        return round(score, 2)
+
+    @staticmethod
+    def _looks_google_owned(url: str) -> bool:
+        try:
+            host = str(urlparse(url).hostname or "").lower()
+        except Exception:
+            return False
+        return host.startswith("google.") or host.startswith("www.google.") or host.endswith(".google.com") or "googleusercontent" in host
 
     def _open_candidate_preview(self, candidate: CandidateRecord) -> None:
         query_url = self._gallery_detail(candidate, "query_url")

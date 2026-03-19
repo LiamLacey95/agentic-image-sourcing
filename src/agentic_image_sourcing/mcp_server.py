@@ -37,6 +37,7 @@ def create_mcp_server(service: RetrievalService | None = None):
     def google_image_gallery(
         query: str,
         batch_size: int = 12,
+        batch_number: int = 1,
         offset: int = 0,
         browser_mode: str | None = None,
         profile_id: str | None = None,
@@ -46,6 +47,7 @@ def create_mcp_server(service: RetrievalService | None = None):
             GoogleGalleryRequest(
                 query=query,
                 batch_size=batch_size,
+                batch_number=batch_number,
                 offset=offset,
                 browser_mode=browser_mode,
                 profile_id=profile_id,

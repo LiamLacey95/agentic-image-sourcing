@@ -55,13 +55,13 @@ class FakePinchTab:
             "items": [
                 {
                     "domIndex": 0,
-                    "imageUrl": "https://images.example.com/0.jpg",
-                    "thumbnailUrl": "https://thumbs.example.com/0.jpg",
-                    "sourcePageUrl": "https://source.example.com/0",
+                    "imageUrl": "data:image/jpeg;base64,AAA",
+                    "thumbnailUrl": "data:image/jpeg;base64,AAA",
+                    "sourcePageUrl": None,
                     "googleResultUrl": None,
-                    "altText": "Zero",
-                    "nearbyText": "Result Zero",
-                    "rect": {"left": 0, "top": 0, "width": 100, "height": 100},
+                    "altText": "Logo",
+                    "nearbyText": "Tiny",
+                    "rect": {"left": 0, "top": 0, "width": 40, "height": 40},
                 },
                 {
                     "domIndex": 1,
@@ -69,9 +69,29 @@ class FakePinchTab:
                     "thumbnailUrl": "https://thumbs.example.com/1.jpg",
                     "sourcePageUrl": "https://source.example.com/1",
                     "googleResultUrl": None,
-                    "altText": "One",
-                    "nearbyText": "Result One",
-                    "rect": {"left": 100, "top": 0, "width": 100, "height": 100},
+                    "altText": "One wildlife reference image with context",
+                    "nearbyText": "Result One in the wild",
+                    "rect": {"left": 100, "top": 0, "width": 140, "height": 140},
+                },
+                {
+                    "domIndex": 2,
+                    "imageUrl": "https://images.example.com/2.jpg",
+                    "thumbnailUrl": "https://thumbs.example.com/2.jpg",
+                    "sourcePageUrl": "https://source.example.com/2",
+                    "googleResultUrl": None,
+                    "altText": "Two wildlife reference image with strong context",
+                    "nearbyText": "Result Two with more details",
+                    "rect": {"left": 200, "top": 0, "width": 150, "height": 150},
+                },
+                {
+                    "domIndex": 3,
+                    "imageUrl": "https://images.example.com/3.jpg",
+                    "thumbnailUrl": "https://thumbs.example.com/3.jpg",
+                    "sourcePageUrl": "https://source.example.com/3",
+                    "googleResultUrl": None,
+                    "altText": "Three",
+                    "nearbyText": "Result Three",
+                    "rect": {"left": 300, "top": 0, "width": 120, "height": 120},
                 },
             ],
             "viewport": {"width": 1200, "height": 800, "dpr": 1},
@@ -96,6 +116,14 @@ def test_build_gallery_tracks_dom_index_and_inspect_reopens_tile(tmp_path: Path)
     assert Path(gallery_path).exists()
     assert instance_id == "inst-live"
     assert candidates[1].provenance.steps[0].details["dom_index"] == 1
+    assert candidates[0].quality_score is not None
+    assert candidates[0].quality_score >= candidates[1].quality_score
+
+    batch_two_gallery_id, _, batch_two_candidates, _ = adapter.build_gallery(
+        GoogleGalleryRequest(query="robot", batch_size=2, batch_number=2)
+    )
+    assert batch_two_gallery_id
+    assert batch_two_candidates[0].provenance.steps[0].details["batch_number"] == 2
 
     inspected = adapter.inspect_candidate(candidates[1])
     assert inspected.image_url == "https://cdn.example.com/preview.jpg"

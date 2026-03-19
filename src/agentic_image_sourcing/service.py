@@ -102,11 +102,19 @@ class RetrievalService:
         )
         gallery_id, gallery_path, candidates, instance_id = adapter.build_gallery(request)
         stored = self._store_candidates(job, candidates, request.batch_size)
+        effective_offset = self._google_effective_offset(request)
+        has_more = len(stored) == request.batch_size
         return GoogleGalleryResponse(
             job=job,
             gallery_id=gallery_id,
             gallery_image_path=gallery_path,
             pinchtab_instance_id=instance_id,
+            batch_number=max(1, request.batch_number),
+            next_batch_number=(max(1, request.batch_number) + 1) if has_more else None,
+            has_more=has_more,
+            requested_offset=request.offset,
+            effective_offset=effective_offset,
+            candidate_pool_size=effective_offset + len(stored),
             candidates=stored,
         )
 
@@ -235,6 +243,12 @@ class RetrievalService:
         if not self.google_browser_adapter:
             raise RuntimeError("Google browser automation is not configured")
         return self.google_browser_adapter
+
+    @staticmethod
+    def _google_effective_offset(request: GoogleGalleryRequest) -> int:
+        if request.offset > 0:
+            return request.offset
+        return (max(1, request.batch_number) - 1) * request.batch_size
 
 
 def build_service(settings: Settings | None = None) -> RetrievalService:

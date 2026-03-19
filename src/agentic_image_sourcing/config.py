@@ -41,6 +41,7 @@ class Settings(BaseSettings):
     pinchtab_scroll_pause_seconds: float = 1.0
     google_gallery_tile_size: int = 256
     google_gallery_columns: int = 4
+    google_gallery_pool_multiplier: int = 3
 
     user_agent: str = "AgenticImageSourcing/0.1"
     request_timeout_seconds: float = 20.0
