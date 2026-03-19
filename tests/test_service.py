@@ -50,10 +50,14 @@ def test_google_gallery_inspect_and_download_flow(service) -> None:
     assert gallery.has_more is True
 
     inspected = service.google_image_inspect(GoogleInspectRequest(candidate_id=gallery.candidates[0].candidate_id))
-    assert inspected.candidate.image_url == "https://cdn.example.com/full-resolution.jpg"
+    assert inspected.candidate.image_url == "https://cdn.example.com/source-original.jpg"
     assert inspected.candidate.pinchtab_instance_id == "inst-managed"
+    assert inspected.candidate.width == 2400
+    assert inspected.candidate.height == 1600
+    assert inspected.candidate.local_cache_path is not None
+    assert inspected.source_page_candidates
     persisted = service.candidate_inspect(inspected.candidate.candidate_id)
-    assert persisted.image_url == "https://cdn.example.com/full-resolution.jpg"
+    assert persisted.image_url == "https://cdn.example.com/source-original.jpg"
 
     saved = service.google_image_download(
         GoogleDownloadRequest(candidate_id=gallery.candidates[0].candidate_id, collection="google-picks")

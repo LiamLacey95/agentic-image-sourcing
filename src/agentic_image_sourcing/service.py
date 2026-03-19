@@ -16,6 +16,7 @@ from .models import (
     CandidateListResponse,
     CandidateRecord,
     ExtractRequest,
+    FetchMode,
     FetchRequest,
     FetchResult,
     FetchStatus,
@@ -27,6 +28,7 @@ from .models import (
     JobKind,
     JobRecord,
     Provenance,
+    ProvenanceStep,
     SaveAssetRequest,
     SearchRequest,
 )
@@ -125,14 +127,10 @@ class RetrievalService:
         )
         candidate = self.candidate_inspect(request.candidate_id)
         inspected = adapter.inspect_candidate(candidate)
-        inspected = self.repository.upsert_candidate(inspected)
 
         source_page_candidates: list[CandidateRecord] = []
-        if request.open_source_page and inspected.source_page_url:
-            try:
-                source_page_candidates = self.extractor.extract(inspected.source_page_url, limit=5)
-            except Exception:
-                source_page_candidates = []
+        inspected, source_page_candidates = self._resolve_source_page_image(inspected)
+        inspected = self.repository.upsert_candidate(inspected)
 
         return GoogleInspectResponse(job=job, candidate=inspected, source_page_candidates=source_page_candidates)
 
@@ -249,6 +247,152 @@ class RetrievalService:
         if request.offset > 0:
             return request.offset
         return (max(1, request.batch_number) - 1) * request.batch_size
+
+    def _resolve_source_page_image(self, candidate: CandidateRecord) -> tuple[CandidateRecord, list[CandidateRecord]]:
+        if not candidate.source_page_url:
+            return candidate, []
+        try:
+            extracted = self.extractor.extract(candidate.source_page_url, limit=8)
+        except Exception:
+            return candidate, []
+
+        resolved_candidates: list[CandidateRecord] = []
+        best_candidate: CandidateRecord | None = None
+        best_payload = None
+        best_score = float("-inf")
+        current_area = (candidate.width or 0) * (candidate.height or 0)
+
+        for extracted_candidate in extracted:
+            try:
+                payload = self.fetcher.fetch_image(extracted_candidate.image_url, FetchMode.full)
+            except Exception:
+                continue
+
+            resolved = extracted_candidate.model_copy(
+                update={
+                    "source_page_url": candidate.source_page_url or extracted_candidate.source_page_url,
+                    "source_domain": candidate.source_domain or extracted_candidate.source_domain,
+                    "page_title": candidate.page_title or extracted_candidate.page_title,
+                    "mime_type": payload.mime_type or extracted_candidate.mime_type,
+                    "width": payload.width or extracted_candidate.width,
+                    "height": payload.height or extracted_candidate.height,
+                    "byte_size": payload.byte_size,
+                    "fetch_status": FetchStatus.fetched,
+                    "content_hash": payload.content_hash,
+                    "perceptual_hash": payload.perceptual_hash,
+                    "provenance": extracted_candidate.provenance.model_copy(
+                        update={
+                            "http_status": payload.provenance.http_status,
+                            "redirect_chain": payload.provenance.redirect_chain,
+                            "steps": [*extracted_candidate.provenance.steps, *payload.provenance.steps],
+                        }
+                    ),
+                }
+            )
+            resolved_candidates.append(resolved)
+
+            score = self._source_resolution_score(resolved, preferred_domain=candidate.source_domain)
+            if score > best_score:
+                best_score = score
+                best_candidate = resolved
+                best_payload = payload
+
+        if not best_candidate or not best_payload:
+            return candidate, resolved_candidates
+
+        best_area = (best_candidate.width or 0) * (best_candidate.height or 0)
+        if not self._should_replace_with_source_image(candidate, current_area=current_area, best_area=best_area, best_url=best_candidate.image_url):
+            return candidate, resolved_candidates
+
+        cache_path = self.cache.write(best_payload.data, key_hint=best_payload.source_url, mime_type=best_payload.mime_type)
+        updated = candidate.model_copy(
+            update={
+                "image_url": best_payload.source_url,
+                "source_page_url": candidate.source_page_url or best_candidate.source_page_url,
+                "source_domain": candidate.source_domain or best_candidate.source_domain,
+                "page_title": candidate.page_title or best_candidate.page_title,
+                "mime_type": best_payload.mime_type or candidate.mime_type,
+                "width": best_payload.width or candidate.width,
+                "height": best_payload.height or candidate.height,
+                "byte_size": best_payload.byte_size,
+                "local_cache_path": cache_path,
+                "content_hash": best_payload.content_hash,
+                "perceptual_hash": best_payload.perceptual_hash,
+                "fetch_status": FetchStatus.cached,
+                "crawl_timestamp": best_candidate.crawl_timestamp,
+                "provenance": candidate.provenance.model_copy(
+                    update={
+                        "http_status": best_payload.provenance.http_status,
+                        "redirect_chain": best_payload.provenance.redirect_chain,
+                        "steps": [
+                            *candidate.provenance.steps,
+                            *best_payload.provenance.steps,
+                            ProvenanceStep(
+                                stage="source_page_resolve",
+                                source="extractor",
+                                details={
+                                    "source_page_url": candidate.source_page_url,
+                                    "resolved_image_url": best_payload.source_url,
+                                    "resolved_width": best_payload.width,
+                                    "resolved_height": best_payload.height,
+                                    "candidate_count": len(resolved_candidates),
+                                },
+                            ),
+                        ],
+                    }
+                ),
+            }
+        )
+        return updated, resolved_candidates
+
+    @staticmethod
+    def _source_resolution_score(candidate: CandidateRecord, preferred_domain: str | None) -> float:
+        width = float(candidate.width or 0)
+        height = float(candidate.height or 0)
+        score = width * height
+        if candidate.source_domain and preferred_domain and candidate.source_domain == preferred_domain:
+            score += 250_000
+        if candidate.provenance.steps:
+            source = candidate.provenance.steps[0].source
+            if source == "metadata":
+                score += 500_000
+            elif source == "jsonld":
+                score += 350_000
+        return score
+
+    @staticmethod
+    def _should_replace_with_source_image(
+        candidate: CandidateRecord,
+        *,
+        current_area: int,
+        best_area: int,
+        best_url: str,
+    ) -> bool:
+        if best_area <= 0:
+            return False
+        if candidate.image_url == best_url and not candidate.local_cache_path:
+            return True
+        if current_area <= 0:
+            return True
+        if RetrievalService._looks_like_preview_image(candidate.image_url):
+            return True
+        return best_area > current_area * 1.2
+
+    @staticmethod
+    def _looks_like_preview_image(url: str | None) -> bool:
+        if not url:
+            return True
+        lowered = url.lower()
+        if lowered.startswith("data:"):
+            return True
+        preview_markers = (
+            "encrypted-tbn",
+            "googleusercontent",
+            "gstatic.com/images",
+            "/images?q=tbn:",
+            "imgres",
+        )
+        return any(marker in lowered for marker in preview_markers)
 
 
 def build_service(settings: Settings | None = None) -> RetrievalService:

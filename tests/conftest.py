@@ -39,11 +39,12 @@ class FakeGoogleAdapter:
 
 
 class FakeExtractor:
-    def __init__(self, candidates: list[CandidateRecord]) -> None:
+    def __init__(self, candidates: list[CandidateRecord], by_url: dict[str, list[CandidateRecord]] | None = None) -> None:
         self._candidates = candidates
+        self._by_url = by_url or {}
 
     def extract(self, url: str, limit: int, capture_page_screenshot: bool = False) -> list[CandidateRecord]:
-        return self._candidates[:limit]
+        return self._by_url.get(url, self._candidates)[:limit]
 
 
 class FakeCrawler:
@@ -55,13 +56,13 @@ class FakeCrawler:
 
 
 class FakeFetchPayload:
-    def __init__(self, url: str, mode: FetchMode, data: bytes) -> None:
+    def __init__(self, url: str, mode: FetchMode, data: bytes, *, mime_type: str, width: int, height: int) -> None:
         self.source_url = url
         self.mode = mode
         self.data = data
-        self.mime_type = "image/png"
-        self.width = 4
-        self.height = 4
+        self.mime_type = mime_type
+        self.width = width
+        self.height = height
         self.byte_size = len(data)
         self.content_hash = "content-hash"
         self.perceptual_hash = "perceptual-hash"
@@ -74,13 +75,29 @@ class FakeFetchPayload:
 
 class FakeFetcher:
     def __init__(self) -> None:
-        image = Image.new("RGB", (4, 4), "red")
-        buffer = BytesIO()
-        image.save(buffer, format="PNG")
-        self._data = buffer.getvalue()
+        self._images = {
+            "default": self._build_image_bytes((4, 4), "PNG"),
+            "https://cdn.example.com/full-resolution.jpg": self._build_image_bytes((1024, 768), "JPEG"),
+            "https://cdn.example.com/source-original.jpg": self._build_image_bytes((2400, 1600), "JPEG"),
+            "https://cdn.example.com/source-small.jpg": self._build_image_bytes((640, 480), "JPEG"),
+        }
 
     def fetch_image(self, url: str, mode: FetchMode) -> FakeFetchPayload:
-        return FakeFetchPayload(url, mode, self._data)
+        data = self._images.get(url, self._images["default"])
+        if url.endswith(".jpg") or url.endswith(".jpeg"):
+            mime_type = "image/jpeg"
+        else:
+            mime_type = "image/png"
+        with Image.open(BytesIO(data)) as image:
+            width, height = image.size
+        return FakeFetchPayload(url, mode, data, mime_type=mime_type, width=width, height=height)
+
+    @staticmethod
+    def _build_image_bytes(size: tuple[int, int], fmt: str) -> bytes:
+        image = Image.new("RGB", size, "red")
+        buffer = BytesIO()
+        image.save(buffer, format=fmt)
+        return buffer.getvalue()
 
 
 class FakeGoogleBrowserAdapter:
@@ -160,6 +177,30 @@ def service(settings: Settings) -> RetrievalService:
         make_candidate("https://images.example.com/one.png", source="page_extract"),
         make_candidate("https://images.example.com/three.png", source="page_extract"),
     ]
+    source_resolution_candidates = {
+        "https://source.example.com/inspected": [
+            CandidateRecord(
+                image_url="https://cdn.example.com/source-small.jpg",
+                source_page_url="https://source.example.com/inspected",
+                source_domain="source.example.com",
+                page_title="Inspected Source",
+                provenance=Provenance(
+                    discovery_method="page_extract",
+                    steps=[ProvenanceStep(stage="extract", source="img")],
+                ),
+            ),
+            CandidateRecord(
+                image_url="https://cdn.example.com/source-original.jpg",
+                source_page_url="https://source.example.com/inspected",
+                source_domain="source.example.com",
+                page_title="Inspected Source",
+                provenance=Provenance(
+                    discovery_method="page_extract",
+                    steps=[ProvenanceStep(stage="extract", source="metadata")],
+                ),
+            ),
+        ]
+    }
     repository = build_repository(settings.database_url)
     object_store = build_object_store(settings)
     cache = FileCache(settings.local_cache_dir)
@@ -169,7 +210,7 @@ def service(settings: Settings) -> RetrievalService:
         object_store=object_store,
         cache=cache,
         google_adapter=FakeGoogleAdapter(google_candidates),
-        extractor=FakeExtractor(extractor_candidates),
+        extractor=FakeExtractor(extractor_candidates, by_url=source_resolution_candidates),
         crawler=FakeCrawler(extractor_candidates),
         fetcher=FakeFetcher(),
         google_browser_adapter=FakeGoogleBrowserAdapter(settings),

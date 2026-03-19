@@ -35,4 +35,4 @@ def test_google_gallery_and_inspect_routes(service) -> None:
     candidate_id = payload["candidates"][0]["candidate_id"]
     inspect = client.post("/google/inspect", json=GoogleInspectRequest(candidate_id=candidate_id).model_dump())
     assert inspect.status_code == 200
-    assert inspect.json()["candidate"]["image_url"] == "https://cdn.example.com/full-resolution.jpg"
+    assert inspect.json()["candidate"]["image_url"] == "https://cdn.example.com/source-original.jpg"
