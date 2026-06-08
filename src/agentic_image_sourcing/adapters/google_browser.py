@@ -9,7 +9,7 @@ from uuid import uuid4
 from ..config import Settings
 from ..google_gallery import ContactSheetBuilder, RenderableTile
 from ..models import BrowserMode, CandidateRecord, GoogleGalleryRequest, Provenance, ProvenanceStep, utc_now
-from ..pinchtab_client import PinchTabClient
+from ..playwright_client import PlaywrightClient
 from ..utils import domain_for_url
 
 
@@ -314,7 +314,7 @@ class GoogleImagesBrowserAdapter:
     def __init__(
         self,
         settings: Settings,
-        pinchtab: PinchTabClient,
+        pinchtab: PlaywrightClient,
         sheet_builder: ContactSheetBuilder,
     ) -> None:
         self.settings = settings
@@ -324,8 +324,8 @@ class GoogleImagesBrowserAdapter:
         self._lock = Lock()
 
     def build_gallery(self, request: GoogleGalleryRequest) -> tuple[str, str, list[CandidateRecord], str]:
-        browser_mode = request.browser_mode or BrowserMode(self.settings.pinchtab_default_browser_mode)
-        profile_id = request.profile_id or self.settings.pinchtab_default_profile_id
+        browser_mode = request.browser_mode or BrowserMode(self.settings.playwright_browser_mode)
+        profile_id = request.profile_id
         instance_id = self._ensure_instance(
             browser_mode=browser_mode,
             profile_id=profile_id,
@@ -380,7 +380,7 @@ class GoogleImagesBrowserAdapter:
                 gallery_id=gallery_id,
                 tile_index=index,
                 google_result_url=item.get("googleResultUrl"),
-                pinchtab_instance_id=instance_id,
+                browser_instance_id=instance_id,
                 provenance=Provenance(
                     discovery_method="google_images_browser",
                     discovered_at=now,
@@ -388,7 +388,7 @@ class GoogleImagesBrowserAdapter:
                     steps=[
                         ProvenanceStep(
                             stage="google_gallery",
-                            source="pinchtab",
+                            source="playwright",
                             details={
                                 "query_url": raw.get("currentUrl"),
                                 "instance_id": instance_id,
@@ -422,17 +422,17 @@ class GoogleImagesBrowserAdapter:
         return gallery_id, gallery_path, candidates, instance_id
 
     def inspect_candidate(self, candidate: CandidateRecord) -> CandidateRecord:
-        if not candidate.pinchtab_instance_id:
-            raise RuntimeError("Candidate is missing PinchTab instance context")
+        if not candidate.browser_instance_id:
+            raise RuntimeError("Candidate is missing browser instance context")
         if candidate.google_result_url:
-            self.pinchtab.navigate(candidate.pinchtab_instance_id, candidate.google_result_url)
-            time.sleep(self.settings.pinchtab_scroll_pause_seconds)
+            self.pinchtab.navigate(candidate.browser_instance_id, candidate.google_result_url)
+            time.sleep(self.settings.google_gallery_scroll_pause_seconds)
         else:
             self._open_candidate_preview(candidate)
 
-        payload = self.pinchtab.evaluate(candidate.pinchtab_instance_id, INSPECT_JS)
+        payload = self.pinchtab.evaluate(candidate.browser_instance_id, INSPECT_JS)
         if not isinstance(payload, dict):
-            raise RuntimeError("Unexpected PinchTab inspect payload")
+            raise RuntimeError("Unexpected browser inspect payload")
 
         image_url = payload.get("previewImageUrl") or candidate.image_url
         source_page_url = payload.get("sourcePageUrl") or candidate.source_page_url
@@ -453,9 +453,9 @@ class GoogleImagesBrowserAdapter:
                             *candidate.provenance.steps,
                             ProvenanceStep(
                                 stage="google_inspect",
-                                source="pinchtab",
+                                source="playwright",
                                 details={
-                                    "instance_id": candidate.pinchtab_instance_id,
+                                    "instance_id": candidate.browser_instance_id,
                                     "google_result_url": candidate.google_result_url,
                                     "source_page_url": source_page_url,
                                 },
@@ -472,7 +472,7 @@ class GoogleImagesBrowserAdapter:
         except Exception:
             return
         if accepted:
-            time.sleep(self.settings.pinchtab_scroll_pause_seconds)
+            time.sleep(self.settings.google_gallery_scroll_pause_seconds)
 
     def _open_gallery_page(
         self,
@@ -483,7 +483,7 @@ class GoogleImagesBrowserAdapter:
         managed_instance: bool,
     ) -> tuple[str, BrowserMode]:
         self.pinchtab.navigate(instance_id, query_url)
-        time.sleep(self.settings.pinchtab_scroll_pause_seconds)
+        time.sleep(self.settings.google_gallery_scroll_pause_seconds)
         self._dismiss_consent(instance_id)
         block_state = self._block_state(instance_id)
         if not block_state.get("blocked"):
@@ -491,7 +491,7 @@ class GoogleImagesBrowserAdapter:
         if browser_mode != BrowserMode.headed and managed_instance:
             fallback_instance_id = self._ensure_instance(BrowserMode.headed, profile_id=profile_id, instance_id=None)
             self.pinchtab.navigate(fallback_instance_id, query_url)
-            time.sleep(self.settings.pinchtab_scroll_pause_seconds)
+            time.sleep(self.settings.google_gallery_scroll_pause_seconds)
             self._dismiss_consent(fallback_instance_id)
             fallback_state = self._block_state(fallback_instance_id)
             if not fallback_state.get("blocked"):
@@ -504,7 +504,7 @@ class GoogleImagesBrowserAdapter:
     def _collect_gallery_payload(self, instance_id: str, needed: int) -> dict:
         payload = {"items": [], "viewport": {"width": 0, "height": 0, "dpr": 1}}
         attempts = 0
-        while len(payload.get("items", [])) < needed and attempts <= self.settings.pinchtab_gallery_scroll_attempts:
+        while len(payload.get("items", [])) < needed and attempts <= self.settings.google_gallery_scroll_attempts:
             evaluated = self.pinchtab.evaluate(instance_id, GALLERY_EXTRACTION_JS)
             if isinstance(evaluated, dict):
                 payload = evaluated
@@ -513,9 +513,9 @@ class GoogleImagesBrowserAdapter:
             attempts += 1
             self.pinchtab.evaluate(
                 instance_id,
-                f"(() => {{ window.scrollBy(0, {self.settings.pinchtab_gallery_scroll_step}); return true; }})()",
+                f"(() => {{ window.scrollBy(0, {self.settings.google_gallery_scroll_step}); return true; }})()",
             )
-            time.sleep(self.settings.pinchtab_scroll_pause_seconds)
+            time.sleep(self.settings.google_gallery_scroll_pause_seconds)
         return payload
 
     def _block_state(self, instance_id: str) -> dict:
@@ -578,20 +578,20 @@ class GoogleImagesBrowserAdapter:
         query_url = self._gallery_detail(candidate, "query_url")
         dom_index = self._gallery_detail(candidate, "dom_index")
         if query_url:
-            self.pinchtab.navigate(candidate.pinchtab_instance_id, str(query_url))
-            time.sleep(self.settings.pinchtab_scroll_pause_seconds)
-            self._dismiss_consent(candidate.pinchtab_instance_id)
+            self.pinchtab.navigate(candidate.browser_instance_id, str(query_url))
+            time.sleep(self.settings.google_gallery_scroll_pause_seconds)
+            self._dismiss_consent(candidate.browser_instance_id)
         target_index = int(dom_index) if dom_index is not None else max((candidate.tile_index or 1) - 1, 0)
-        payload = self._collect_gallery_payload(candidate.pinchtab_instance_id, target_index + 1)
+        payload = self._collect_gallery_payload(candidate.browser_instance_id, target_index + 1)
         if len(payload.get("items", [])) <= target_index:
             raise RuntimeError(f"Unable to locate Google Images tile {target_index}")
         clicked = self.pinchtab.evaluate(
-            candidate.pinchtab_instance_id,
+            candidate.browser_instance_id,
             CLICK_TILE_JS_TEMPLATE.replace("__TARGET_INDEX__", str(target_index)),
         )
         if isinstance(clicked, dict) and not clicked.get("clicked"):
             raise RuntimeError(f"Unable to open Google Images tile {target_index}")
-        time.sleep(self.settings.pinchtab_scroll_pause_seconds)
+        time.sleep(self.settings.google_gallery_scroll_pause_seconds)
 
     def _ensure_instance(
         self,
@@ -628,7 +628,7 @@ class GoogleImagesBrowserAdapter:
         ):
             if candidate:
                 return str(candidate)
-        raise RuntimeError("Unable to extract instance id from PinchTab response")
+        raise RuntimeError("Unable to extract instance id from Playwright response")
 
     @staticmethod
     def _crop_rect(rect: dict | None, viewport: dict) -> tuple[int, int, int, int] | None:

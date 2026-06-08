@@ -81,7 +81,7 @@ class CandidateRecord(BaseModel):
     gallery_id: str | None = None
     tile_index: int | None = None
     google_result_url: str | None = None
-    pinchtab_instance_id: str | None = None
+    browser_instance_id: str | None = None
     provenance: Provenance
 
 
@@ -184,7 +184,7 @@ class GoogleGalleryResponse(BaseModel):
     job: JobRecord
     gallery_id: str
     gallery_image_path: str
-    pinchtab_instance_id: str
+    browser_instance_id: str
     batch_number: int
     next_batch_number: int | None = None
     has_more: bool = False

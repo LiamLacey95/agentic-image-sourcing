@@ -32,7 +32,7 @@ from .models import (
     SaveAssetRequest,
     SearchRequest,
 )
-from .pinchtab_client import PinchTabClient
+from .playwright_client import PlaywrightClient
 from .policies import DomainRateLimiter, RobotsPolicy
 from .repository import Repository, build_repository
 from .storage import FileCache, ObjectStore, build_object_store
@@ -110,7 +110,7 @@ class RetrievalService:
             job=job,
             gallery_id=gallery_id,
             gallery_image_path=gallery_path,
-            pinchtab_instance_id=instance_id,
+            browser_instance_id=instance_id,
             batch_number=max(1, request.batch_number),
             next_batch_number=(max(1, request.batch_number) + 1) if has_more else None,
             has_more=has_more,
@@ -408,11 +408,11 @@ def build_service(settings: Settings | None = None) -> RetrievalService:
     extractor = DirectPageImageExtractor(settings=settings, fetcher=fetcher, browser_capture=browser_capture)
     crawler = SiteCrawlerAdapter(settings=settings, fetcher=fetcher, extractor=extractor)
     google_adapter = GoogleImageDiscoveryAdapter(settings=settings)
-    pinchtab_client = PinchTabClient(settings=settings)
+    playwright_client = PlaywrightClient(settings=settings)
     contact_sheet_builder = ContactSheetBuilder(settings=settings)
     google_browser_adapter = GoogleImagesBrowserAdapter(
         settings=settings,
-        pinchtab=pinchtab_client,
+        pinchtab=playwright_client,
         sheet_builder=contact_sheet_builder,
     )
     return RetrievalService(
