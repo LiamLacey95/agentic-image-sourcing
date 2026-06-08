@@ -13,7 +13,7 @@ CANDIDATE_EXTRA_COLUMNS = {
     "gallery_id": "TEXT",
     "tile_index": "INTEGER",
     "google_result_url": "TEXT",
-    "pinchtab_instance_id": "TEXT",
+    "browser_instance_id": "TEXT",
     "quality_score": "REAL",
 }
 
@@ -106,7 +106,7 @@ class SQLiteRepository:
                     gallery_id TEXT,
                     tile_index INTEGER,
                     google_result_url TEXT,
-                    pinchtab_instance_id TEXT,
+                    browser_instance_id TEXT,
                     provenance_json TEXT NOT NULL
                 );
 
@@ -175,7 +175,7 @@ class SQLiteRepository:
                     candidate_id, job_id, query_text, image_url, thumbnail_url, source_page_url, source_domain,
                     mime_type, width, height, byte_size, page_title, alt_text, nearby_text, crawl_timestamp,
                     fetch_status, storage_key, local_cache_path, page_screenshot_path, content_hash, perceptual_hash,
-                    last_error, quality_score, gallery_id, tile_index, google_result_url, pinchtab_instance_id, provenance_json
+                    last_error, quality_score, gallery_id, tile_index, google_result_url, browser_instance_id, provenance_json
                 )
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
@@ -227,7 +227,7 @@ class SQLiteRepository:
                     mime_type = ?, width = ?, height = ?, byte_size = ?, page_title = ?, alt_text = ?,
                     nearby_text = ?, crawl_timestamp = ?, fetch_status = ?, storage_key = ?, local_cache_path = ?,
                     page_screenshot_path = ?, content_hash = ?, perceptual_hash = ?, last_error = ?, quality_score = ?,
-                    gallery_id = ?, tile_index = ?, google_result_url = ?, pinchtab_instance_id = ?, provenance_json = ?
+                    gallery_id = ?, tile_index = ?, google_result_url = ?, browser_instance_id = ?, provenance_json = ?
                 WHERE candidate_id = ?
                 """,
                 (
@@ -256,7 +256,7 @@ class SQLiteRepository:
                     candidate.gallery_id,
                     candidate.tile_index,
                     candidate.google_result_url,
-                    candidate.pinchtab_instance_id,
+                    candidate.browser_instance_id,
                     candidate.provenance.model_dump_json(),
                     candidate.candidate_id,
                 ),
@@ -311,7 +311,7 @@ class SQLiteRepository:
                 "gallery_id": row["gallery_id"],
                 "tile_index": row["tile_index"],
                 "google_result_url": row["google_result_url"],
-                "pinchtab_instance_id": row["pinchtab_instance_id"],
+                "browser_instance_id": row["browser_instance_id"],
                 "provenance": parse_json(row["provenance_json"], {}),
             }
         )
@@ -345,7 +345,7 @@ class SQLiteRepository:
             candidate.gallery_id,
             candidate.tile_index,
             candidate.google_result_url,
-            candidate.pinchtab_instance_id,
+            candidate.browser_instance_id,
             candidate.provenance.model_dump_json(),
         )
 
@@ -368,7 +368,7 @@ class SQLiteRepository:
                 "gallery_id": incoming.gallery_id or existing.gallery_id,
                 "tile_index": incoming.tile_index if incoming.tile_index is not None else existing.tile_index,
                 "google_result_url": incoming.google_result_url or existing.google_result_url,
-                "pinchtab_instance_id": incoming.pinchtab_instance_id or existing.pinchtab_instance_id,
+                "browser_instance_id": incoming.browser_instance_id or existing.browser_instance_id,
                 "crawl_timestamp": incoming.crawl_timestamp,
                 "page_screenshot_path": incoming.page_screenshot_path or existing.page_screenshot_path,
                 "quality_score": incoming.quality_score if incoming.quality_score is not None else existing.quality_score,
@@ -456,7 +456,7 @@ class PsycopgRepository:
                         gallery_id TEXT,
                         tile_index INTEGER,
                         google_result_url TEXT,
-                        pinchtab_instance_id TEXT,
+                        browser_instance_id TEXT,
                         provenance_json TEXT NOT NULL
                     )
                     """
@@ -534,7 +534,7 @@ class PsycopgRepository:
                         candidate_id, job_id, query_text, image_url, thumbnail_url, source_page_url, source_domain,
                         mime_type, width, height, byte_size, page_title, alt_text, nearby_text, crawl_timestamp,
                         fetch_status, storage_key, local_cache_path, page_screenshot_path, content_hash, perceptual_hash,
-                        last_error, quality_score, gallery_id, tile_index, google_result_url, pinchtab_instance_id, provenance_json
+                        last_error, quality_score, gallery_id, tile_index, google_result_url, browser_instance_id, provenance_json
                     )
                     VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     """,
@@ -595,7 +595,7 @@ class PsycopgRepository:
                         mime_type = %s, width = %s, height = %s, byte_size = %s, page_title = %s, alt_text = %s,
                         nearby_text = %s, crawl_timestamp = %s, fetch_status = %s, storage_key = %s, local_cache_path = %s,
                         page_screenshot_path = %s, content_hash = %s, perceptual_hash = %s, last_error = %s,
-                        quality_score = %s, gallery_id = %s, tile_index = %s, google_result_url = %s, pinchtab_instance_id = %s, provenance_json = %s
+                        quality_score = %s, gallery_id = %s, tile_index = %s, google_result_url = %s, browser_instance_id = %s, provenance_json = %s
                     WHERE candidate_id = %s
                     """,
                     (
@@ -624,7 +624,7 @@ class PsycopgRepository:
                         candidate.gallery_id,
                         candidate.tile_index,
                         candidate.google_result_url,
-                        candidate.pinchtab_instance_id,
+                        candidate.browser_instance_id,
                         candidate.provenance.model_dump_json(),
                         candidate.candidate_id,
                     ),
@@ -681,7 +681,7 @@ class PsycopgRepository:
                 "gallery_id": row["gallery_id"],
                 "tile_index": row["tile_index"],
                 "google_result_url": row["google_result_url"],
-                "pinchtab_instance_id": row["pinchtab_instance_id"],
+                "browser_instance_id": row["browser_instance_id"],
                 "provenance": parse_json(row["provenance_json"], {}),
             }
         )

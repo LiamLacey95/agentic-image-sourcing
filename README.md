@@ -2,13 +2,13 @@
 
 Agentic Image Sourcing is a Python service that helps AI agents discover, inspect, fetch, and persist relevant images from Google Images and direct public websites.
 
-It is designed around a browser-automation workflow for Google Images using PinchTab, with a clean agent-facing surface over HTTP and MCP.
+It is designed around a Playwright browser-automation workflow for Google Images, with a clean agent-facing surface over HTTP and MCP.
 
 ## What It Provides
 
 - HTTP API for image search, page extraction, fetching, inspection, and asset persistence
 - MCP server wrapper over the same service methods
-- PinchTab-driven Google Images browser workflow with contact-sheet output
+- Playwright-driven Google Images browser workflow with contact-sheet output
 - Google Custom Search image discovery adapter for keyed/API use cases
 - Direct page image extraction from metadata, JSON-LD, `img`, lazy-load, and `srcset`
 - Public-web crawling with per-domain rate limiting and robots-aware access checks
@@ -26,7 +26,7 @@ pip install -e .[test,mcp]
 ```
 
 2. Copy `.env.example` to `.env`.
-3. Start a local PinchTab server and allow public internet browsing for the browser instance you want agents to use.
+3. Install Playwright browsers: `playwright install chromium`
 4. Optionally set `AIS_GOOGLE_API_KEY` and `AIS_GOOGLE_CSE_ID` if you also want API-backed discovery.
 5. Run the HTTP API:
 
@@ -40,11 +40,10 @@ ais api --host 127.0.0.1 --port 8000
 ais mcp
 ```
 
-## PinchTab Requirements
+## Playwright Requirements
 
-- PinchTab must be running locally and reachable at `AIS_PINCHTAB_BASE_URL`.
-- The Google browser workflow requires `security.allowEvaluate = true` in PinchTab.
-- Headed mode is the recommended default for Google Images reliability. Headless mode can work, but Google may block it and trigger a fallback.
+- Run `playwright install chromium` after pip install.
+- Headed mode (`AIS_PLAYWRIGHT_BROWSER_MODE=headed`) is the default and recommended for Google Images reliability. Headless mode can work, but Google may block it and trigger an automatic fallback to headed.
 
 ## HTTP Endpoints
 
@@ -62,14 +61,14 @@ ais mcp
 Use the Google browser workflow when an agent needs to visually assess a batch of results:
 
 1. Call `POST /google/gallery` or `google_image_gallery`.
-2. The service drives PinchTab to Google Images, scores a larger pool of candidates, assembles a 12-at-a-time contact sheet, and returns a manifest of numbered candidates.
+2. The service drives Playwright to Google Images, scores a larger pool of candidates, assembles a 12-at-a-time contact sheet, and returns a manifest of numbered candidates.
 3. The agent evaluates the contact sheet visually and selects one or more `candidate_id` values.
 4. Call `POST /google/inspect` or `google_image_inspect` to resolve the larger preview/source page metadata.
 5. Call `POST /google/download` or `google_image_download` to cache and persist selected results.
 
 For follow-up batches, use `batch_number=2` or `batch_number=3` on the gallery request. The service will return the next scored page of results.
 
-The current implementation isolates Google DOM scraping inside the PinchTab-backed adapter so selector updates stay contained when Google changes its layout.
+The current implementation isolates Google DOM scraping inside the Playwright-backed adapter so selector updates stay contained when Google changes its layout.
 
 ## PAI Integration
 
